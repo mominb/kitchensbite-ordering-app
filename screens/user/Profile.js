@@ -38,14 +38,26 @@ const Profile = ({ refreshUserInfo, deleteUserCart, session }) => {
 
       const loadUserData = async () => {
          setIsLoading(true);
-         const userData = await getUserData();
-         const user = userData.data?.user;
-         if (user) {
-            setName(user.user_metadata?.displayName ?? "");
-            setEmail(user.user_metadata?.email ?? "");
-            setPhone(user.user_metadata?.phone ?? "");
+         try {
+            const userDataPromise = getUserData();
+            const timeoutPromise = new Promise((resolve) =>
+               setTimeout(() => resolve({ error: new Error("Timeout") }), 8000)
+            );
+            const userData = await Promise.race([userDataPromise, timeoutPromise]);
+            
+            if (!userData?.error) {
+               const user = userData.data?.user;
+               if (user) {
+                  setName(user.user_metadata?.displayName ?? "");
+                  setEmail(user.user_metadata?.email ?? "");
+                  setPhone(user.user_metadata?.phone ?? "");
+               }
+            }
+         } catch (err) {
+            console.error("Error loading user data:", err);
+         } finally {
+            setIsLoading(false);
          }
-         setIsLoading(false);
       };
       loadUserData();
    }, [session]);

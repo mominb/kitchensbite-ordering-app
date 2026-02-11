@@ -41,9 +41,7 @@ export default function App() {
         Boolean(user?.user_metadata?.displayName && user?.user_metadata?.phone),
       );
       const role = await getUserRole();
-      if (role?.[0]?.role) {
-        setUserRole(role[0].role);
-      }
+      setUserRole(role?.[0]?.role);
     } catch (err) {
       console.error("Error getting user information:", err);
     }
@@ -56,25 +54,29 @@ export default function App() {
           promise,
           new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
         ]);
-      
       try {
-        const data = await withTimeout(bootstrap(), 5000, [[], null]);
+        const data = await withTimeout(bootstrap(), 8000, [[], null]);
         setMenuCategories(data[0] || []);
+
+        await withTimeout(getUserInformation(), 6000, null);
 
         const sessionResult = await withTimeout(
           supabase.auth.getSession(),
-          5000,
+          15000,
           { data: { session: null } },
         );
         setSession(sessionResult?.data?.session ?? null);
         
-        if (sessionResult?.data?.session) {
-          await withTimeout(getUserInformation(), 3000, null);
+        if (sessionResult?.data?.session && __DEV__) {
+          console.log("Session restored on load");
         }
 
         setLoading(false);
       } catch (err) {
         console.error("Error during bootstrap:", err);
+        if (Platform.OS !== "web") {
+          setError(err.message);
+        }
         setLoading(false);
       }
     };
@@ -85,7 +87,10 @@ export default function App() {
       async (_event, currentSession) => {
         setSession(currentSession);
         if (currentSession) {
-          await getUserInformation();
+          const timeoutPromise = new Promise((resolve) =>
+            setTimeout(() => resolve(null), 8000)
+          );
+          await Promise.race([getUserInformation(), timeoutPromise]);
         } else {
           setUserMetaDataExists(false);
           setUserRole(undefined);

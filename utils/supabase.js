@@ -5,22 +5,50 @@ import { Platform } from "react-native";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+let didDebugRestPing = false;
 
-const withQueryTimeout = async (queryPromise, timeoutMs = 8000) => {
-   if (Platform.OS !== "web") {
-      return await queryPromise;
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+   const controller = new AbortController();
+   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+   try {
+      return await fetch(url, { ...options, signal: controller.signal });
+   } finally {
+      clearTimeout(timeoutId);
    }
-   
-   return Promise.race([
-      queryPromise,
-      new Promise((_, reject) =>
-         setTimeout(() => reject(new Error("Query timeout")), timeoutMs)
-      ),
-   ]);
+};
+
+const buildRestUrl = (table, params) => {
+   const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+   Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+         url.searchParams.append(key, value);
+      }
+   });
+   return url.toString();
+};
+
+const createWebFetch = () => {
+   if (typeof fetch !== "function") return null;
+   return async (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      const isAuthEndpoint = url.includes("/auth/v1/");
+      const timeoutMs = isAuthEndpoint ? 30000 : 8000;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+         if (__DEV__) {
+            console.log("supabase fetch:", url, isAuthEndpoint ? "(auth)" : "");
+         }
+         return await fetch(input, { ...init, signal: controller.signal });
+      } finally {
+         clearTimeout(timeoutId);
+      }
+   };
 };
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-   console.error("Missing Supabase env vars.");
+   console.error("Missing Supabase env vars for web build.");
 }
 
 export const supabase = createClient(
@@ -31,11 +59,22 @@ export const supabase = createClient(
          storage: appStorage,
          persistSession: true,
          autoRefreshToken: true,
-         detectSessionInUrl: Platform.OS === "web",
-         debug: __DEV__ && Platform.OS === "web",
+         detectSessionInUrl: false,
       },
+      ...(Platform.OS === "web"
+         ? { global: { fetch: createWebFetch() } }
+         : {}),
    },
 );
+
+if (__DEV__) {
+   console.log("supabase init", {
+      platform: Platform.OS,
+      hasUrl: Boolean(SUPABASE_URL),
+      hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+      useWebFetch: Platform.OS === "web",
+   });
+}
 
 const MENU_IMAGE_BUCKET = "menu-images";
 const buildPublicUrlPrefix = () =>
@@ -143,20 +182,14 @@ export async function updateUserData(updates) {
 }
 
 export async function getUserData() {
-   try {
-      const authPromise = supabase.auth.getUser();
-      const { data, error } = await withQueryTimeout(authPromise, 5000);
+   const { data, error } = await supabase.auth.getUser();
 
-      if (error) {
-         console.log("error retrieving user data from supabase: ", error);
-         return { error };
-      }
-
-      return { data, error: null };
-   } catch (error) {
-      console.log("getUserData exception:", error);
+   if (error) {
+      console.log("error retrieving user data from supabase: ", error);
       return { error };
    }
+
+   return { data, error: null };
 }
 
 export async function placeOrder(
@@ -218,37 +251,51 @@ export async function getAllOrders() {
 }
 
 export async function getUserRole() {
-   try {
-      const authPromise = supabase.auth.getUser();
-      const { data: userData, error: userErr } = await withQueryTimeout(authPromise, 5000);
-      
-      if (userErr) {
-         console.log("error getting user: ", userErr);
-         return [];
-      }
-      
-      const userId = userData?.user?.id;
-      if (!userId) {
-         return [];
-      }
-      
-      const query = supabase
-         .from("user_roles")
-         .select("*")
-         .eq("user_id", userId);
-      
-      const { data, error } = await withQueryTimeout(query);
-      
-      if (error) {
-         console.log("error retrieving user roles: ", error);
-         return [];
-      }
-
-      return data || [];
-   } catch (error) {
-      console.log("getUserRole exception:", error);
+   const { data: userData, error: userErr } = await supabase.auth.getUser();
+   if (userErr) {
+      console.log("error getting user: ", userErr);
       return [];
    }
+   const userId = userData?.user?.id;
+   
+   if (Platform.OS === "web" && SUPABASE_ANON_KEY) {
+      try {
+         const url = buildRestUrl("user_roles", {
+            select: "*",
+            user_id: `eq.${userId}`,
+         });
+         const response = await fetchWithTimeout(
+            url,
+            {
+               method: "GET",
+               headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+               },
+            },
+            8000,
+         );
+         if (!response.ok) {
+            console.log("user roles rest fetch failed", response.status);
+            return [];
+         }
+         return await response.json();
+      } catch (error) {
+         console.log("user roles rest fetch error", error?.message || error);
+         return [];
+      }
+   }
+   
+   const { data, error } = await supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", userId);
+   if (error) {
+      console.log("error retrieving user roles: ", error);
+      return [];
+   }
+
+   return data;
 }
 
 export async function updateOrderStatus(status, id) {
@@ -330,23 +377,43 @@ export async function deleteMenuItem(id) {
 }
 
 export async function getGlobalSettings() {
-   try {
-      const query = supabase
-         .from("global_settings")
-         .select("*")
-         .eq("id", true);
-      
-      const { data, error } = await withQueryTimeout(query);
-
-      if (error) {
-         console.log("error fetching global settings: ", error);
+   if (Platform.OS === "web" && SUPABASE_ANON_KEY) {
+      try {
+         const url = buildRestUrl("global_settings", {
+            select: "*",
+            id: "eq.true",
+         });
+         const response = await fetchWithTimeout(
+            url,
+            {
+               method: "GET",
+               headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+               },
+            },
+            8000,
+         );
+         if (!response.ok) {
+            console.log("global settings rest fetch failed", response.status);
+            return [];
+         }
+         return await response.json();
+      } catch (error) {
+         console.log("global settings rest fetch error", error?.message || error);
          return [];
       }
-      return data || [];
-   } catch (error) {
-      console.log("getGlobalSettings exception:", error);
+   }
+   const { data, error } = await supabase
+      .from("global_settings")
+      .select("*")
+      .eq("id", true);
+
+   if (error) {
+      console.log("error fetching global settings: ", error);
       return [];
    }
+   return data;
 }
 
 export async function updateGlobalSettings(restaurant_available) {
@@ -360,51 +427,141 @@ export async function updateGlobalSettings(restaurant_available) {
 }
 
 export async function getMenuByFilterAndSearch(categories, searchTerm) {
-   try {
-      let query = supabase.from("menu").select("*").eq("is_disabled", false);
-
-      if (searchTerm) {
-         query = query.ilike("name", `%${searchTerm}%`);
-      }
-
-      if (categories?.length) {
-         query = query.in("category", categories);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-         console.log("error filtering menu items: ", error);
-         return [];
-      }
-      return data || [];
-   } catch (error) {
-      console.log("getMenuByFilterAndSearch exception:", error);
+   if (!SUPABASE_URL) {
+      console.error("Supabase URL missing; cannot load menu.");
       return [];
    }
+   if (__DEV__ && Platform.OS === "web") {
+      console.log("menu query start", { categories, searchTerm, url: SUPABASE_URL });
+   }
+
+   if (
+      __DEV__ &&
+      Platform.OS === "web" &&
+      !didDebugRestPing &&
+      SUPABASE_ANON_KEY
+   ) {
+      didDebugRestPing = true;
+      try {
+         const url = `${SUPABASE_URL}/rest/v1/menu?select=id&limit=1&is_disabled=eq.false`;
+         const response = await fetchWithTimeout(
+            url,
+            {
+               method: "GET",
+               headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+               },
+            },
+            8000,
+         );
+         console.log("menu rest ping", response.status);
+      } catch (error) {
+         console.log("menu rest ping failed", error?.message || error);
+      }
+   }
+
+   if (Platform.OS === "web" && SUPABASE_ANON_KEY) {
+      try {
+         const params = {
+            select: "*",
+            is_disabled: "eq.false",
+         };
+         if (searchTerm) {
+            params.name = `ilike.*${searchTerm}*`;
+         }
+         if (categories?.length) {
+            params.category = `in.(${categories.join(",")})`;
+         }
+         const url = buildRestUrl("menu", params);
+         const response = await fetchWithTimeout(
+            url,
+            {
+               method: "GET",
+               headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+               },
+            },
+            8000,
+         );
+         if (!response.ok) {
+            console.log("menu rest fetch failed", response.status);
+            return [];
+         }
+         return await response.json();
+      } catch (error) {
+         console.log("menu rest fetch error", error?.message || error);
+         return [];
+      }
+   }
+
+   let query = supabase.from("menu").select("*").eq("is_disabled", false);
+
+   if (searchTerm) {
+      query = query.ilike("name", `%${searchTerm}%`);
+   }
+
+   if (categories?.length) {
+      query = query.in("category", categories);
+   }
+
+   const { data, error } = await query;
+   if (error) {
+      console.log("error filtering menu items: ", error);
+      return [];
+   }
+   return data;
 }
 
 export async function getMenuCategories() {
-   try {
-      const query = supabase
-         .from("menu")
-         .select("category")
-         .eq("is_disabled", false);
-      
-      const { data, error } = await withQueryTimeout(query);
-      
-      if (error) {
-         console.log("error fetching menu categories: ", error);
+   if (Platform.OS === "web" && SUPABASE_ANON_KEY) {
+      try {
+         const url = buildRestUrl("menu", {
+            select: "category",
+            is_disabled: "eq.false",
+         });
+         const response = await fetchWithTimeout(
+            url,
+            {
+               method: "GET",
+               headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+               },
+            },
+            8000,
+         );
+         if (!response.ok) {
+            console.log("menu categories rest fetch failed", response.status);
+            return [];
+         }
+         const data = await response.json();
+         const categories = [];
+         data.forEach((item) => {
+            if (item.category && !categories.includes(item.category)) {
+               categories.push(item.category);
+            }
+         });
+         return categories;
+      } catch (error) {
+         console.log("menu categories rest fetch error", error?.message || error);
          return [];
       }
-      const categories = [];
-      data?.forEach((item) => {
-         if (item.category && !categories.includes(item.category)) {
-            categories.push(item.category);
-         }
-      });
-      return categories;
-   } catch (error) {
-      console.log("getMenuCategories exception:", error);
+   }
+   const { data, error } = await supabase
+      .from("menu")
+      .select("category")
+      .eq("is_disabled", false);
+   if (error) {
+      console.log("error fetching menu categories: ", error);
       return [];
    }
+   const categories = [];
+   data.forEach((item) => {
+      if (item.category && !categories.includes(item.category)) {
+         categories.push(item.category);
+      }
+   });
+   return categories;
 }
