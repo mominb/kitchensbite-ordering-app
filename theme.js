@@ -1,43 +1,43 @@
 // Centralized theme for Kitchens Bite app
 export const colors = {
-  // Primary colors - Orange/Red theme for Kitchens Bite
-  primary: '#FF6B35',
-  primaryDark: '#E13B00',
-  primaryLight: '#FF8C61',
+  // Primary colors - Deep slate with vibrant pink accent
+  primary: '#1F2937',
+  primaryDark: '#111827',
+  primaryLight: '#374151',
   
-  // Secondary colors
-  secondary: '#FFA500',
-  secondaryDark: '#CC8400',
-  secondaryLight: '#FFB733',
+  // Secondary colors - Bright vibrant pink (FoodPanda style)
+  secondary: '#FF1744',
+  secondaryDark: '#D51B4C',
+  secondaryLight: '#FF5577',
   
-  // Accent colors
-  accent: '#F44336',
-  accentLight: '#FF5252',
+  // Accent colors - Bright pink
+  accent: '#FF1744',
+  accentLight: '#FF5577',
   
   // Neutral colors
   background: '#FFFFFF',
-  backgroundGray: '#F5F5F5',
-  backgroundDark: '#37474F',
+  backgroundGray: '#F9FAFB',
+  backgroundDark: '#111827',
   
   // Text colors
-  textPrimary: '#212121',
-  textSecondary: '#757575',
+  textPrimary: '#111827',
+  textSecondary: '#4B5563',
   textLight: '#FFFFFF',
-  textMuted: '#9E9E9E',
+  textMuted: '#9CA3AF',
   
   // Status colors
-  success: '#4CAF50',
-  warning: '#FF9800',
-  error: '#F44336',
-  info: '#2196F3',
+  success: '#10B981',
+  warning: '#F97316',
+  error: '#FF1744',
+  info: '#3B82F6',
   
   // Border & Divider
-  border: '#E0E0E0',
-  divider: '#BDBDBD',
+  border: '#E5E7EB',
+  divider: '#D1D5DB',
   
   // Card & Surface
   card: '#FFFFFF',
-  cardShadow: 'rgba(0, 0, 0, 0.1)',
+  cardShadow: 'rgba(0, 0, 0, 0.14)',
 };
 
 export const spacing = {

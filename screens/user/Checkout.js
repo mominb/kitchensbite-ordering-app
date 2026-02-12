@@ -18,6 +18,7 @@ import InfoBox from "../../components/InfoBox";
 import { getGlobalSettings, placeOrder } from "../../utils/supabase";
 import * as cart from "../../utils/cart";
 import { colors, fontSize, fontWeight, borderRadius, spacing } from "../../theme";
+import { deliveryOptions, paymentOptions } from "../../config";
 
 const Checkout = ({ route, session, userMetaDataExists }) => {
    const [isLoading, setIsLoading] = useState(false);
@@ -25,14 +26,9 @@ const Checkout = ({ route, session, userMetaDataExists }) => {
    const data = route.params;
    const cartItems = data?.cartItems || [];
    const totalAmount = data?.totalAmount || 0;
-   const paymentMethods = [{ label: "Cash on Delivery", value: "COD" }];
-   const [paymentMethod, setPaymentMethod] = useState("COD");
+   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0]?.value || "COD");
    const [currency, setCurrency] = useState("Rs");
-   const deliveryMethods = [
-      { label: "Deliver to Doorstep", value: "Delivery" },
-      { label: "Pick-up from Restaurant", value: "Pickup" },
-   ];
-   const [deliveryMethod, setDeliveryMethod] = useState("Delivery");
+   const [deliveryMethod, setDeliveryMethod] = useState(deliveryOptions[0]?.value || "Delivery");
 
    useEffect(() => {
       if (!session) {
@@ -125,7 +121,7 @@ const Checkout = ({ route, session, userMetaDataExists }) => {
                <Text style={styles.subHeading}>Delivery Method</Text>
                <Dropdown
                   style={styles.methodSelector}
-                  data={deliveryMethods}
+                  data={deliveryOptions}
                   labelField="label"
                   valueField="value"
                   placeholder="Select"
@@ -135,7 +131,7 @@ const Checkout = ({ route, session, userMetaDataExists }) => {
                <Text style={styles.subHeading}>Payment Method</Text>
                <Dropdown
                   style={styles.methodSelector}
-                  data={paymentMethods}
+                  data={paymentOptions}
                   labelField="label"
                   valueField="value"
                   placeholder="Select"

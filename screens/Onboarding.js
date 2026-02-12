@@ -16,6 +16,7 @@ import OtpTimer from "../components/OtpTimer";
 import { colors, spacing, fontSize, fontWeight, borderRadius, shadows } from "../theme";
 import { sendEmailOTP, verifyEmailOTP } from "../utils/supabase";
 import { appStorage } from "../utils/storage";
+import { appName } from "../config";
 
 const Onboarding = () => {
    const [email, setEmail] = useState("");
@@ -84,7 +85,7 @@ const Onboarding = () => {
                   color={colors.textLight}
                />
             </View>
-            <Text style={styles.title}>Kitchen's Bite</Text>
+            <Text style={styles.title}>{appName}</Text>
             <Text style={styles.subtitle}>Sign in to continue</Text>
          </View>
 

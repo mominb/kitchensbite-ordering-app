@@ -15,15 +15,9 @@ import OrderItemList from "../../components/OrderItemList";
 import PageHeader from "../../components/PageHeader";
 import { colors, fontSize, fontWeight, borderRadius, spacing } from "../../theme";
 import { updateOrderStatus } from "../../utils/supabase";
+import { orderStatuses } from "../../config";
 
 const ManageOrder = ({ route }) => {
-   const statusUpdateOptions = [
-      { label: "Pending", value: "pending" },
-      { label: "Confirmed", value: "confirmed" },
-      { label: "Completed", value: "completed" },
-      { label: "Cancelled", value: "cancelled" },
-   ];
-
    const navigator = useNavigation();
    const { item: order } = route.params;
    const orderItems = order.order_items || [];
@@ -72,7 +66,7 @@ const ManageOrder = ({ route }) => {
             <Text style={styles.subHeading}>Status</Text>
             <Dropdown
                style={styles.dropdown}
-               data={statusUpdateOptions}
+               data={orderStatuses}
                labelField="label"
                valueField="value"
                placeholder="Select"
@@ -99,7 +93,7 @@ const ManageOrder = ({ route }) => {
                   Email: {order.user_data.email}
                </Text>
                <Text style={styles.infoText}>
-                  Phone: 0{order.user_data.phone}
+                  Phone: {order.user_data.phone}
                </Text>
             </View>
          </ScrollView>

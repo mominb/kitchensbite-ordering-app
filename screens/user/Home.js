@@ -22,6 +22,7 @@ import {
    getGlobalSettings,
    getMenuByFilterAndSearch,
 } from "../../utils/supabase";
+import { businessName } from "../../config";
 import * as cart from "../../utils/cart";
 
 const Home = ({ menuCategories, session }) => {
@@ -124,7 +125,7 @@ const Home = ({ menuCategories, session }) => {
          <View style={styles.header}>
             <View style={styles.logoContainer}>
                <MaterialIcons name="restaurant-menu" size={32} color={colors.primary} />
-               <Text style={styles.logoText}>Kitchen's Bite</Text>
+               <Text style={styles.logoText}>{businessName}</Text>
             </View>
             <TouchableOpacity onPress={handleProfileIconClick} style={styles.iconButton}>
                <Ionicons name="person-circle-outline" size={32} color={colors.textPrimary} />

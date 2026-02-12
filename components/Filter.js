@@ -14,7 +14,14 @@ const Filter = ({ categories, onClick, activeCat }) => {
          onPress={() => onClick(category)}
          key={category}
       >
-         <Text style={styles.filterButtonText}>{category}</Text>
+         <Text 
+            style={[
+               styles.filterButtonText,
+               isActive(category) && { color: colors.textLight }
+            ]}
+         >
+            {category}
+         </Text>
       </TouchableOpacity>
    ));
 };

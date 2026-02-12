@@ -18,6 +18,7 @@ import Toast from "react-native-toast-message";
 import PageHeader from "../../components/PageHeader";
 import { colors, fontSize, fontWeight, borderRadius, spacing } from "../../theme";
 import { getUserData, supabase, updateUserData } from "../../utils/supabase";
+import { countryCode, validatePhone, validateEmail, validateName, validation } from "../../config";
 
 const Profile = ({ refreshUserInfo, deleteUserCart, session }) => {
    const [name, setName] = useState("");
@@ -50,7 +51,17 @@ const Profile = ({ refreshUserInfo, deleteUserCart, session }) => {
                if (user) {
                   setName(user.user_metadata?.displayName ?? "");
                   setEmail(user.user_metadata?.email ?? "");
-                  setPhone(user.user_metadata?.phone ?? "");
+                  
+                  // Parse phone number to extract just the number part
+                  const fullPhone = user.user_metadata?.phone ?? "";
+                  if (fullPhone) {
+                     // Remove the specific country code prefix from config
+                     let phoneNumber = fullPhone.trim();
+                     if (phoneNumber.startsWith(countryCode)) {
+                        phoneNumber = phoneNumber.substring(countryCode.length);
+                     }
+                     setPhone(phoneNumber);
+                  }
                }
             }
          } catch (err) {
@@ -63,18 +74,52 @@ const Profile = ({ refreshUserInfo, deleteUserCart, session }) => {
    }, [session]);
 
    const handleSaveInfo = async () => {
-      if (!name || !phone) {
+      // Validate name
+      const nameValidation = validateName(name);
+      if (!nameValidation.valid) {
          Toast.show({
             type: "error",
-            text1: "Name and phone required",
+            text1: nameValidation.message,
          });
          return;
       }
 
+      // Validate phone
+      if (!phone) {
+         Toast.show({
+            type: "error",
+            text1: "Phone number is required",
+         });
+         return;
+      }
+
+      const phoneValidation = validatePhone(phone);
+      if (!phoneValidation.valid) {
+         Toast.show({
+            type: "error",
+            text1: phoneValidation.message,
+         });
+         return;
+      }
+
+      // Validate email if provided
+      if (email) {
+         const emailValidation = validateEmail(email);
+         if (!emailValidation.valid) {
+            Toast.show({
+               type: "error",
+               text1: emailValidation.message,
+            });
+            return;
+         }
+      }
+
       setIsLoading(true);
       try {
+         // Combine country code and phone number
+         const fullPhone = `${countryCode}${phone}`;
          await updateUserData({
-            phone: phone,
+            phone: fullPhone,
             email: email,
             displayName: name,
          });
@@ -160,16 +205,22 @@ const Profile = ({ refreshUserInfo, deleteUserCart, session }) => {
                   />
 
                   <Text style={styles.label}>Phone</Text>
-                  <TextInput
-                     keyboardType="phone-pad"
-                     onFocus={() => setIsPhoneFocused(true)}
-                     onBlur={() => setIsPhoneFocused(false)}
-                     style={[styles.input, isPhoneFocused && styles.inputFocused]}
-                     value={phone}
-                     onChangeText={setPhone}
-                     placeholder="+92 3XX XXXXXXX"
-                     placeholderTextColor={colors.textMuted}
-                  />
+                  <View style={styles.phoneContainer}>
+                     <View style={styles.countryCodeDisplay}>
+                        <Text style={styles.countryCodeText}>{countryCode}</Text>
+                     </View>
+                     <TextInput
+                        keyboardType="phone-pad"
+                        onFocus={() => setIsPhoneFocused(true)}
+                        onBlur={() => setIsPhoneFocused(false)}
+                        style={[styles.phoneInput, isPhoneFocused && styles.inputFocused]}
+                        value={phone}
+                        onChangeText={setPhone}
+                        placeholder={validation.phoneFormat}
+                        placeholderTextColor={colors.textMuted}
+                        maxLength={validation.phoneMaxLength}
+                     />
+                  </View>
                </View>
             </ScrollView>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveInfo}>
@@ -214,6 +265,37 @@ const styles = StyleSheet.create({
    },
    inputFocused: {
       borderColor: colors.primary,
+   },
+   phoneContainer: {
+      flexDirection: "row",
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+   },
+   countryCodeDisplay: {
+      height: 52,
+      width: 80,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: borderRadius.md,
+      backgroundColor: colors.backgroundGray,
+      justifyContent: "center",
+      alignItems: "center",
+   },
+   countryCodeText: {
+      fontSize: fontSize.md,
+      fontWeight: fontWeight.semibold,
+      color: colors.textPrimary,
+   },
+   phoneInput: {
+      flex: 1,
+      height: 52,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: borderRadius.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.background,
+      color: colors.textPrimary,
+      fontSize: fontSize.md,
    },
    saveButton: {
       alignSelf: "center",
